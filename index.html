@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人消費紀錄系統 (含登入功能)</title>
+    
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center; /* 讓登入框垂直置中 */
+            min-height: 100vh;   /* 讓畫面至少有視窗高度 */
+            margin: 0;
+        }
+
+        /* 通用容器樣式 */
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 600px;
+            text-align: center;
+            /* 預設隱藏，透過 JS 控制顯示 */
+            display: none; 
+        }
+
+        /* 登入專用樣式 */
+        .login-box {
+            width: 350px;
+            display: none; /* 預設隱藏 */
+        }
+
+        h2 { color: #333; margin-bottom: 25px; }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 25px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        input, select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            outline: none;
+            width: 100%; /* 滿版寬度 */
+            box-sizing: border-box; /* 包含 padding */
+        }
+
+        input:focus, select:focus { border-color: #4CAF50; }
+
+        button {
+            padding: 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        button:hover { background-color: #218838; }
+
+        /* 登出與次要按鈕 */
+        .secondary-btn {
+            background-color: #6c757d;
+            margin-top: 10px;
+        }
+        .secondary-btn:hover { background-color: #5a6268; }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        /* 統計與表格樣式 */
+        .summary {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #444;
+            padding: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        #totalAmount { color: #d9534f; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background-color: #e9ecef; color: #555; font-weight: bold; }
+        
+        .tag {
+            background-color: #e2e6ea; padding: 4px 10px;
+            border-radius: 15px; font-size: 13px; color: #495057; font-weight: bold;
+        }
+
+        .delete-btn {
+            background-color: #dc3545; padding: 6px 12px; font-size: 14px; width: auto;
+        }
+        .delete-btn:hover { background-color: #c82333; }
+    </style>
+</head>
+<body>
+
+    <div id="loginPage" class="container login-box">
+        <h2 id="loginTitle">🔐 用戶登入</h2>
+        <div class="input-group">
+            <input type="text" id="username" placeholder="請輸入使用者名稱">
+            <input type="password" id="password" placeholder="請輸入密碼">
+            <button onclick="handleLogin()" id="loginBtn">登入</button>
+            <p id="loginMsg" style="color: red; font-size: 14px; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <div id="appPage" class="container">
+        <div class="header-row">
+            <h2>💰 <span id="displayUser"></span> 的消費紀錄</h2>
+            <button onclick="logout()" class="secondary-btn" style="width: auto; padding: 8px 15px; font-size: 14px;">登出</button>
+        </div>
+        
+        <div class="input-group">
+            <select id="categoryInput">
+                <option value="飲食">🍔 飲食</option>
+                <option value="交通">🚗 交通</option>
+                <option value="娛樂">🎮 娛樂</option>
+                <option value="購物">🛍️ 購物</option>
+                <option value="居家">🏠 居家</option>
+                <option value="其他">🔹 其他</option>
+            </select>
+            <input type="text" id="itemInput" placeholder="消費物品名稱">
+            <input type="number" id="priceInput" placeholder="金額 (NT$)" min="0">
+            <input type="date" id="dateInput">
+            <button onclick="addRecord()">＋ 新增紀錄</button>
+        </div>
+
+        <div class="summary">
+            總消費金額: <span id="totalAmount">0</span> 元
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th width="20%">日期</th>
+                    <th width="15%">類別</th>
+                    <th width="35%">物品</th>
+                    <th width="15%">價格</th>
+                    <th width="15%">操作</th>
+                </tr>
+            </thead>
+            <tbody id="recordList"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // --- 全域變數 ---
+        let expenseDatabase = [];
+        const STORAGE_KEY_DATA = 'expenseData';
+        const STORAGE_KEY_USER = 'userAccount'; // 存帳密的 Key
+
+        // --- 程式啟動 ---
+        window.onload = function() {
+            checkLoginStatus();
+        };
+
+        // --- 登入系統邏輯 ---
+        function checkLoginStatus() {
+            const storedUser = localStorage.getItem(STORAGE_KEY_USER);
+            const loginPage = document.getElementById('loginPage');
+            const loginTitle = document.getElementById('loginTitle');
+            const loginBtn = document.getElementById('loginBtn');
+
+            // 顯示登入頁，隱藏主頁
+            document.getElementById('appPage').style.display = 'none';
+            loginPage.style.display = 'block';
+
+            if (!storedUser) {
+                // 如果沒有存過帳密，進入「註冊模式」
+                loginTitle.textContent = "🆕 設定您的帳號密碼";
+                loginBtn.textContent = "註冊並開始";
+                loginBtn.onclick = handleRegister;
+            } else {
+                // 如果有帳密，進入「登入模式」
+                loginTitle.textContent = "🔐 用戶登入";
+                loginBtn.textContent = "登入";
+                loginBtn.onclick = handleLogin;
+            }
+        }
+
+        function handleRegister() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            if (user && pass) {
+                // 儲存帳密物件
+                const account = { username: user, password: pass };
+                localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(account));
+                alert("註冊成功！請重新登入。");
+                location.reload(); // 重新整理頁面
+            } else {
+                alert("請輸入帳號與密碼！");
+            }
+        }
+
+        function handleLogin() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const msg = document.getElementById('loginMsg');
+
+            // 讀取儲存的帳密
+            const storedAccount = JSON.parse(localStorage.getItem(STORAGE_KEY_USER));
+
+            if (storedAccount && user === storedAccount.username && pass === storedAccount.password) {
+                // 登入成功
+                msg.textContent = "";
+                showApp(storedAccount.username);
+            } else {
+                // 登入失敗
+                msg.textContent = "❌ 帳號或密碼錯誤";
+            }
+        }
+
+        function showApp(username) {
+            // 切換畫面顯示
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('appPage').style.display = 'block';
+            document.getElementById('displayUser').textContent = username;
+
+            // 載入記帳資料
+            loadData();
+        }
+
+        function logout() {
+            // 簡單地重新整理頁面即可回到登入狀態
+            location.reload();
+        }
+
+        // --- 記帳系統邏輯 (跟之前一樣) ---
+
+        function loadData() {
+            expenseDatabase = JSON.parse(localStorage.getItem(STORAGE_KEY_DATA)) || [];
+            document.getElementById('dateInput').valueAsDate = new Date();
+            renderTable();
+        }
+
+        function addRecord() {
+            const categoryValue = document.getElementById('categoryInput').value;
+            const itemInput = document.getElementById('itemInput');
+            const priceInput = document.getElementById('priceInput');
+            const dateInput = document.getElementById('dateInput');
+
+            const itemValue = itemInput.value;
+            const priceValue = Number(priceInput.value);
+            const dateValue = dateInput.value;
+
+            if (itemValue.trim() === '' || priceValue <= 0 || dateValue === '') {
+                alert("請輸入完整資料！");
+                return;
+            }
+
+            const newRecord = {
+                id: Date.now(),
+                category: categoryValue,
+                item: itemValue,
+                price: priceValue,
+                date: dateValue
+            };
+
+            expenseDatabase.push(newRecord);
+            saveData();
+            renderTable();
+
+            itemInput.value = '';
+            priceInput.value = '';
+        }
+
+        function deleteRecord(id) {
+            if(confirm("確定刪除？")) {
+                expenseDatabase = expenseDatabase.filter(record => record.id !== id);
+                saveData();
+                renderTable();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(expenseDatabase));
+        }
+
+        function renderTable() {
+            const listBody = document.getElementById('recordList');
+            const totalSpan = document.getElementById('totalAmount');
+            listBody.innerHTML = '';
+            let total = 0;
+
+            const sortedData = expenseDatabase.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            sortedData.forEach(record => {
+                total += record.price;
+                const row = document.createElement('tr');
+                const categoryDisplay = record.category || '未分類';
+
+                row.innerHTML = `
+                    <td>${record.date}</td>
+                    <td><span class="tag">${categoryDisplay}</span></td>
+                    <td>${record.item}</td>
+                    <td>$${record.price}</td>
+                    <td><button class="delete-btn" onclick="deleteRecord(${record.id})">刪除</button></td>
+                `;
+                listBody.appendChild(row);
+            });
+            totalSpan.textContent = total.toLocaleString();
+        }
+    </script>
+</body>
+</html>
