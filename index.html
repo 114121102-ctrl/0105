@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人消費紀錄系統 (含登入功能)</title>
+    
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center; /* 讓登入框垂直置中 */
+            min-height: 100vh;   /* 讓高度撐滿視窗 */
+            margin: 0;
+        }
+
+        /* 通用容器樣式 */
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        /* --- 登入頁面專用樣式 --- */
+        #loginPage {
+            width: 300px;
+            /* 預設顯示 */
+            display: block; 
+        }
+
+        /* --- 記帳主程式專用樣式 --- */
+        #appPage {
+            width: 600px;
+            /* 預設隱藏 */
+            display: none; 
+        }
+
+        h2 { color: #333; margin-bottom: 25px; }
+
+        /* 輸入與按鈕共用樣式 */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        /* 登入框的輸入欄位間距 */
+        .login-input {
+            margin-bottom: 15px;
+            width: 90%; /* 讓輸入框不要太滿 */
+            align-self: center;
+        }
+
+        input, select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        button {
+            padding: 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        button:hover { background-color: #218838; }
+
+        /* 登出按鈕 (紅色) */
+        .logout-btn {
+            background-color: #6c757d;
+            font-size: 14px;
+            padding: 8px 16px;
+            margin-bottom: 20px;
+            float: right; /* 靠右對齊 */
+        }
+        .logout-btn:hover { background-color: #5a6268; }
+
+        /* 統計與表格樣式 (維持原樣) */
+        .summary {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #444;
+            padding: 10px;
+            border-bottom: 2px solid #eee;
+            clear: both; /* 清除浮動 */
+        }
+        #totalAmount { color: #d9534f; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background-color: #e9ecef; color: #555; font-weight: bold; }
+        .tag { background-color: #e2e6ea; padding: 4px 10px; border-radius: 15px; font-size: 13px; color: #495057; font-weight: bold; }
+        .delete-btn { background-color: #dc3545; padding: 6px 12px; font-size: 14px; border-radius: 4px; color: white;}
+        .delete-btn:hover { background-color: #c82333; }
+    </style>
+</head>
+<body>
+
+    <div id="loginPage" class="container">
+        <h2>🔒 使用者登入</h2>
+        <div class="input-group">
+            <input type="text" id="username" class="login-input" placeholder="帳號 (預設: admin)">
+            <input type="password" id="password" class="login-input" placeholder="密碼 (預設: 1234)">
+            <button onclick="login()">登入系統</button>
+        </div>
+        <p style="font-size: 12px; color: #888;">提示: 這是前端模擬登入，請勿用於保護敏感資料。</p>
+    </div>
+
+    <div id="appPage" class="container">
+        <button class="logout-btn" onclick="logout()">登出</button>
+
+        <h2>💰 個人消費紀錄</h2>
+        
+        <div class="input-group">
+            <select id="categoryInput">
+                <option value="飲食">🍔 飲食</option>
+                <option value="交通">🚗 交通</option>
+                <option value="娛樂">🎮 娛樂</option>
+                <option value="購物">🛍️ 購物</option>
+                <option value="居家">🏠 居家</option>
+                <option value="其他">🔹 其他</option>
+            </select>
+            
+            <input type="text" id="itemInput" placeholder="消費物品名稱">
+            <input type="number" id="priceInput" placeholder="金額 (NT$)" min="0">
+            <input type="date" id="dateInput">
+            
+            <button onclick="addRecord()">＋ 新增紀錄</button>
+        </div>
+
+        <div class="summary">
+            總消費金額: <span id="totalAmount">0</span> 元
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th width="20%">日期</th>
+                    <th width="15%">類別</th>
+                    <th width="35%">物品</th>
+                    <th width="15%">價格</th>
+                    <th width="15%">操作</th>
+                </tr>
+            </thead>
+            <tbody id="recordList"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // --- 設定帳號密碼 (你可以修改這裡) ---
+        const CORRECT_USER = "admin";
+        const CORRECT_PASS = "1234";
+
+        // --- 功能: 登入系統 ---
+        function login() {
+            const userIn = document.getElementById('username').value;
+            const passIn = document.getElementById('password').value;
+
+            if (userIn === CORRECT_USER && passIn === CORRECT_PASS) {
+                // 1. 隱藏登入頁，顯示主程式
+                document.getElementById('loginPage').style.display = 'none';
+                document.getElementById('appPage').style.display = 'block';
+                
+                // 2. 初始化記帳程式 (載入資料)
+                initApp();
+            } else {
+                alert("帳號或密碼錯誤！(預設為 admin / 1234)");
+                document.getElementById('password').value = ''; // 清空密碼欄
+            }
+        }
+
+        // --- 功能: 登出系統 ---
+        function logout() {
+            // 隱藏主程式，顯示登入頁
+            document.getElementById('appPage').style.display = 'none';
+            document.getElementById('loginPage').style.display = 'block';
+            
+            // 清空登入欄位
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        // --- 以下為原本的記帳程式邏輯 ---
+        
+        let expenseDatabase = [];
+
+        function initApp() {
+            // 從 LocalStorage 讀取資料
+            expenseDatabase = JSON.parse(localStorage.getItem('expenseData')) || [];
+            document.getElementById('dateInput').valueAsDate = new Date();
+            renderTable();
+        }
+
+        function addRecord() {
+            const categoryInput = document.getElementById('categoryInput');
+            const itemInput = document.getElementById('itemInput');
+            const priceInput = document.getElementById('priceInput');
+            const dateInput = document.getElementById('dateInput');
+
+            const categoryValue = categoryInput.value;
+            const itemValue = itemInput.value;
+            const priceValue = Number(priceInput.value);
+            const dateValue = dateInput.value;
+
+            if (itemValue.trim() === '' || priceValue <= 0 || dateValue === '') {
+                alert("請輸入完整的資料！");
+                return;
+            }
+
+            const newRecord = {
+                id: Date.now(),
+                category: categoryValue,
+                item: itemValue,
+                price: priceValue,
+                date: dateValue
+            };
+
+            expenseDatabase.push(newRecord);
+            saveData();
+            renderTable();
+
+            itemInput.value = '';
+            priceInput.value = '';
+        }
+
+        function deleteRecord(id) {
+            if(confirm("確定要刪除這筆紀錄嗎？")) {
+                expenseDatabase = expenseDatabase.filter(record => record.id !== id);
+                saveData();
+                renderTable();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('expenseData', JSON.stringify(expenseDatabase));
+        }
+
+        function renderTable() {
+            const listBody = document.getElementById('recordList');
+            const totalSpan = document.getElementById('totalAmount');
+            
+            listBody.innerHTML = '';
+            let total = 0;
+
+            const sortedData = expenseDatabase.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            sortedData.forEach(record => {
+                total += record.price;
+                const row = document.createElement('tr');
+                const categoryDisplay = record.category || '未分類';
+
+                row.innerHTML = `
+                    <td>${record.date}</td>
+                    <td><span class="tag">${categoryDisplay}</span></td>
+                    <td>${record.item}</td>
+                    <td>$${record.price}</td>
+                    <td>
+                        <button class="delete-btn" onclick="deleteRecord(${record.id})">刪除</button>
+                    </td>
+                `;
+                listBody.appendChild(row);
+            });
+
+            totalSpan.textContent = total.toLocaleString();
+        }
+        
+        // 支援按 Enter 登入
+        document.getElementById('password').addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                login();
+            }
+        });
+    </script>
+
+</body>
+</html>
